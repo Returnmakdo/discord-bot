@@ -7,6 +7,7 @@ class MapleCrawler {
     this.baseUrl = 'https://maplestory.nexon.com';
     this.noticeUrl = `${this.baseUrl}/News/Notice`;
     this.updateUrl = `${this.baseUrl}/News/Update`;
+    this.eventUrl = `${this.baseUrl}/News/Event`;
     this.retryCount = 3;
     this.retryDelay = 5000;
   }
@@ -157,14 +158,51 @@ class MapleCrawler {
     }
   }
 
+  // 이벤트 크롤링
+  async crawlEvents() {
+    try {
+      logger.debug('이벤트 크롤링 시작...');
+      const response = await this.fetchWithRetry(this.eventUrl);
+      const $ = cheerio.load(response.data);
+      const events = [];
+
+      // 최근 5개만 가져오기
+      $('.event_board ul li').slice(0, 5).each((index, element) => {
+        const $elem = $(element);
+        const $link = $elem.find('a');
+        const href = $link.attr('href');
+
+        if (!href) return;
+
+        const title = $elem.find('p.tit').text().trim() || $elem.find('.tit').text().trim();
+        const event = {
+          id: `event_${href.split('/').pop()}`,
+          title: title,
+          link: `${this.baseUrl}${href}`,
+          date: $elem.find('.date').text().trim() || $elem.find('.heart_date dd').text().trim(),
+          category: 'event'
+        };
+
+        events.push(event);
+      });
+
+      logger.info(`이벤트 ${events.length}개 수집 완료`);
+      return events;
+    } catch (error) {
+      logger.error('이벤트 크롤링 실패:', error.message);
+      return [];
+    }
+  }
+
   // 전체 크롤링
   async crawlAll() {
-    const [notices, updates] = await Promise.all([
+    const [notices, updates, events] = await Promise.all([
       this.crawlNotices(),
-      this.crawlUpdates()
+      this.crawlUpdates(),
+      this.crawlEvents()
     ]);
 
-    return [...notices, ...updates];
+    return [...notices, ...updates, ...events];
   }
 }
 
