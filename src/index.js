@@ -43,9 +43,6 @@ class MapleBot {
       // 이벤트 핸들러 등록
       this.setupEventHandlers();
 
-      // 시작 알림
-      await this.discord.sendStartMessage();
-
       // 주기적 체크 시작
       this.startPeriodicCheck();
 
