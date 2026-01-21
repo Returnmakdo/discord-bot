@@ -24,6 +24,7 @@ class MapleBot {
     this.checkInterval = parseInt(process.env.CHECK_INTERVAL) || 300000;
     this.intervalId = null;
     this.isRunning = false;
+    this.isFirstRun = true; // 첫 실행 여부
   }
 
   // 초기화
@@ -126,6 +127,17 @@ class MapleBot {
       }
 
       logger.info(`새로운 공지사항 ${newNotices.length}개 발견`);
+
+      // 첫 실행 시에는 DB에만 저장하고 알림 안 보냄
+      if (this.isFirstRun) {
+        logger.info('첫 실행: 기존 공지사항을 DB에 저장만 합니다 (알림 안 보냄)');
+        for (const notice of newNotices) {
+          this.db.insert(notice);
+        }
+        logger.info(`=== ${newNotices.length}개 공지사항 DB 저장 완료 ===`);
+        this.isFirstRun = false;
+        return;
+      }
 
       // 디스코드에 전송 (최신순으로 정렬해서 오래된 것부터 전송)
       const sortedNotices = newNotices.reverse();
