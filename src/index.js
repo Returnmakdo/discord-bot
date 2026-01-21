@@ -146,8 +146,8 @@ class MapleBot {
         // 상세 내용 가져오기
         const rawContent = await this.crawler.fetchContent(notice.link);
 
-        // AI 요약 (업데이트/패치 노트인 경우에만)
-        if (notice.category === 'update' && rawContent) {
+        // AI 요약 (업데이트/이벤트인 경우)
+        if ((notice.category === 'update' || notice.category === 'event') && rawContent) {
           notice.content = await this.summarizer.summarize(rawContent, notice.title);
         } else {
           // 요약하지 않는 경우 앞부분만 표시
