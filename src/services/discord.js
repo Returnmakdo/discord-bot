@@ -41,18 +41,13 @@ class DiscordService {
       notice: '📢 일반 공지'
     };
 
-    // 메이플스토리 공식 아이콘 URL (Discord에서 작동하는 URL)
-    const mapleIconUrl = 'https://maplestory.nexon.com/favicon.ico';
-
     const embed = new EmbedBuilder()
       .setColor(color)
       .setAuthor({
-        name: '메이플스토리 공식',
-        iconURL: mapleIconUrl
+        name: '🍁 메이플스토리 공식'
       })
       .setTitle(`${emoji} ${notice.title}`)
       .setURL(notice.link)
-      .setThumbnail(mapleIconUrl)
       .addFields(
         {
           name: '📋 분류',
@@ -71,8 +66,7 @@ class DiscordService {
         }
       )
       .setFooter({
-        text: '메이플스토리 공식 홈페이지 | 새 소식 알림',
-        iconURL: mapleIconUrl
+        text: '🍁 메이플스토리 공식 홈페이지'
       })
       .setTimestamp();
 
