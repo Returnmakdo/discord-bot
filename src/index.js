@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
 const MapleCrawler = require('./services/crawler');
 const DiscordService = require('./services/discord');
 const Summarizer = require('./services/summarizer');
@@ -7,6 +7,9 @@ const NoticeDB = require('./utils/database');
 const logger = require('./utils/logger');
 const fs = require('fs');
 const path = require('path');
+
+// 명령어 파일 로드
+const characterCommand = require('./commands/character');
 
 class MapleBot {
   constructor() {
@@ -25,6 +28,10 @@ class MapleBot {
     this.intervalId = null;
     this.isRunning = false;
     this.isFirstRun = true; // 첫 실행 여부
+
+    // 슬래시 명령어 컬렉션
+    this.commands = new Collection();
+    this.commands.set(characterCommand.data.name, characterCommand);
   }
 
   // 초기화
@@ -39,6 +46,9 @@ class MapleBot {
 
       // Discord 서비스 초기화
       this.discord = new DiscordService(this.client);
+
+      // 슬래시 명령어 등록
+      await this.registerCommands();
 
       // 이벤트 핸들러 등록
       this.setupEventHandlers();
@@ -67,6 +77,25 @@ class MapleBot {
     });
   }
 
+  // 슬래시 명령어 등록
+  async registerCommands() {
+    try {
+      const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+      const commands = this.commands.map(cmd => cmd.data.toJSON());
+
+      logger.info(`슬래시 명령어 ${commands.length}개 등록 중...`);
+
+      await rest.put(
+        Routes.applicationCommands(this.client.user.id),
+        { body: commands }
+      );
+
+      logger.info('슬래시 명령어 등록 완료');
+    } catch (error) {
+      logger.error('슬래시 명령어 등록 실패:', error);
+    }
+  }
+
   // 이벤트 핸들러 설정
   setupEventHandlers() {
     this.client.on('ready', () => {
@@ -76,6 +105,28 @@ class MapleBot {
 
     this.client.on('error', (error) => {
       logger.error('Discord 클라이언트 에러:', error);
+    });
+
+    // 슬래시 명령어 처리
+    this.client.on('interactionCreate', async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+
+      const command = this.commands.get(interaction.commandName);
+      if (!command) return;
+
+      try {
+        await command.execute(interaction);
+      } catch (error) {
+        logger.error(`명령어 실행 오류 (${interaction.commandName}):`, error);
+
+        const errorMessage = { content: '❌ 명령어 실행 중 오류가 발생했습니다.', ephemeral: true };
+
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
+      }
     });
 
     // 종료 시그널 처리
