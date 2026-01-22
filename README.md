@@ -126,9 +126,7 @@ npm run dev
 ```
 maple-discord-bot/
 ├── src/
-│   ├── index.js              # 메인 봇 로직
-│   ├── commands/
-│   │   └── character.js      # 경험치 조회 명령어
+│   ├── index.js              # 메인 봇 로직 (경험치 조회 포함)
 │   ├── services/
 │   │   ├── crawler.js        # 메이플 크롤러
 │   │   ├── discord.js        # Discord 메시지 발송
