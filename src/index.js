@@ -132,22 +132,54 @@ class MapleBot {
       // 4. 경험치 변화량 계산
       const changes = this.nexonApi.calculateExpChanges(history);
 
-      // 5. 통계 계산
-      const totalExpGain = changes.reduce((sum, c) => sum + c.expGain, 0);
-      const avgExpGain = totalExpGain / changes.length;
+      // 5. 상세 히스토리 텍스트 생성
+      const historyText = this.generateHistoryText(history, characterName, basicInfo.world_name);
 
-      // 6. QuickChart.io로 그래프 생성 (경험치율 히스토리)
+      // 6. 통계 계산
+      const totalExpGain = changes.reduce((sum, c) => sum + c.expGain, 0);
+      const avgExpGain = changes.length > 0 ? totalExpGain / changes.length : 0;
+
+      // 일평균 경험치
+      const expChanges = [];
+      for (let i = 1; i < history.length; i++) {
+        const diff = history[i].exp - history[i-1].exp;
+        if (diff > 0) expChanges.push(diff);
+      }
+      const avgExp = expChanges.length > 0
+        ? expChanges.reduce((a, b) => a + b, 0) / expChanges.length
+        : 0;
+
+      // 남은 경험치 계산 (현재 레벨에서 100%까지)
+      const currentExp = history[history.length - 1]?.exp || 0;
+      const currentExpRate = history[history.length - 1]?.expRate || 0;
+      const remainingExpRate = 100 - currentExpRate;
+      const totalExpForLevel = currentExpRate > 0 ? (currentExp / currentExpRate) * 100 : 0;
+      const remainingExp = totalExpForLevel - currentExp;
+
+      // 예상 레벨업 날짜 계산
+      let levelUpDateText = '계산 불가';
+      if (avgExpGain > 0) {
+        const daysToLevelUp = Math.ceil(remainingExpRate / avgExpGain);
+        const levelUpDate = new Date();
+        levelUpDate.setDate(levelUpDate.getDate() + daysToLevelUp);
+        const year = String(levelUpDate.getFullYear()).slice(2);
+        const month = String(levelUpDate.getMonth() + 1).padStart(2, '0');
+        const day = String(levelUpDate.getDate()).padStart(2, '0');
+        levelUpDateText = `${year}년 ${month}월 ${day}일 (${daysToLevelUp}일 후)`;
+      }
+
+      // 7. QuickChart.io로 그래프 생성 (경험치율 히스토리)
       const chartUrl = this.generateChartUrl(history);
 
-      // 7. Embed 생성 (이미지 제외)
+      // 8. Embed 생성
       const embed = new EmbedBuilder()
         .setColor(0xFF9900)
         .setTitle('🍁 메이플스토리 경험치 히스토리')
-        .setDescription(`**📊 ${characterName}**\n${basicInfo.world_name} | Lv.${basicInfo.character_level} ${basicInfo.character_class}`)
+        .setDescription(historyText)
         .addFields(
-          { name: '─────────────────────', value: '\u200B', inline: false },
-          { name: '📈 10일간 총 획득', value: `${totalExpGain.toFixed(2)}%`, inline: true },
-          { name: '📊 일평균 획득', value: `${avgExpGain.toFixed(2)}%`, inline: true }
+          { name: '📊 일일 평균 획득량', value: this.formatExpNumber(avgExp).replace('+', ''), inline: true },
+          { name: '📦 남은 경험치량', value: this.formatExpNumber(remainingExp).replace('+', ''), inline: true },
+          { name: '📅 예상 레벨업 날짜', value: levelUpDateText, inline: false }
         )
         .setTimestamp()
         .setFooter({ text: 'Nexon Open API' });
@@ -179,6 +211,60 @@ class MapleBot {
 
       await message.reply(errorMessage);
     }
+  }
+
+  // 숫자를 한국식 단위로 변환 (억, 조, 경)
+  formatExpNumber(num) {
+    if (num === 0) return '0';
+
+    const absNum = Math.abs(num);
+    const sign = num < 0 ? '-' : '+';
+
+    if (absNum >= 10000000000000000) { // 경 (10^16)
+      return `${sign}${(absNum / 10000000000000000).toFixed(1)}경`;
+    } else if (absNum >= 1000000000000) { // 조 (10^12)
+      return `${sign}${(absNum / 1000000000000).toFixed(1)}조`;
+    } else if (absNum >= 100000000) { // 억 (10^8)
+      return `${sign}${(absNum / 100000000).toFixed(1)}억`;
+    } else if (absNum >= 10000) { // 만 (10^4)
+      return `${sign}${(absNum / 10000).toFixed(1)}만`;
+    } else {
+      return `${sign}${absNum.toFixed(0)}`;
+    }
+  }
+
+  // 히스토리 텍스트 생성
+  generateHistoryText(history, characterName, worldName) {
+    let text = `**${characterName}** - ${worldName}\n\`\`\`\n`;
+
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      let dateStr;
+
+      if (h.date === 'NOW') {
+        dateStr = 'NOW      ';
+      } else {
+        const date = new Date(h.date);
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        dateStr = `${month}월 ${day}일`;
+      }
+
+      let expGainText = '';
+      if (i > 0) {
+        const expDiff = history[i].exp - history[i-1].exp;
+        if (expDiff > 0) {
+          expGainText = ` (${this.formatExpNumber(expDiff)})`;
+        } else {
+          expGainText = ` (+0)`;
+        }
+      }
+
+      text += `${dateStr} : Lv.${h.level} ${h.expRate.toFixed(3)}%${expGainText}\n`;
+    }
+
+    text += `\`\`\``;
+    return text;
   }
 
   // QuickChart.io URL 생성 (바 그래프 - 경험치율 히스토리)
