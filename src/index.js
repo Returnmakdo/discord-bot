@@ -243,7 +243,7 @@ class MapleBot {
     };
 
     const encodedConfig = encodeURIComponent(JSON.stringify(chartConfig));
-    return `https://quickchart.io/chart?c=${encodedConfig}&backgroundColor=%23303030&width=1600&height=600&version=3`;
+    return `https://quickchart.io/chart?c=${encodedConfig}&backgroundColor=%23303030&width=1600&height=900&version=3`;
   }
 
   // 사용법 안내 게시 (최초 1회만)
