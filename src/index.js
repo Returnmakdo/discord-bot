@@ -157,15 +157,14 @@ class MapleBot {
         embed.addFields({ name: '🎮 길드', value: basicInfo.character_guild_name, inline: true });
       }
 
-      // 그래프 이미지 다운로드 후 첨부파일로 전송 (가장 크게 표시됨)
+      // Embed 먼저 전송 (텍스트 정보만)
+      await loadingMsg.edit({ content: '', embeds: [embed] });
+
+      // 그래프 이미지 별도 전송 (Embed 밖 = 채팅창 가로 꽉 참)
       const chartResponse = await fetch(chartUrl);
       const chartBuffer = Buffer.from(await chartResponse.arrayBuffer());
       const attachment = new AttachmentBuilder(chartBuffer, { name: 'exp_chart.png' });
-
-      // Embed에 첨부 이미지 연결
-      embed.setImage('attachment://exp_chart.png');
-
-      await loadingMsg.edit({ content: '', embeds: [embed], files: [attachment] });
+      await message.channel.send({ files: [attachment] });
       logger.info(`경험치 조회 완료: ${characterName}`);
 
     } catch (error) {
@@ -229,9 +228,14 @@ class MapleBot {
             grid: { display: false }
           },
           y: {
+            beginAtZero: true,
             min: 0,
             max: 100,
-            ticks: { color: '#ffffff', font: { size: 12 } },
+            ticks: {
+              color: '#ffffff',
+              font: { size: 12 },
+              stepSize: 10
+            },
             grid: { color: 'rgba(255, 255, 255, 0.1)' }
           }
         }
