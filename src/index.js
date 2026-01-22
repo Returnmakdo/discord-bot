@@ -284,8 +284,8 @@ class MapleBot {
         datasets: [{
           label: '경험치 (%)',
           data: data,
-          backgroundColor: 'rgba(255, 153, 0, 0.8)',
-          borderColor: 'rgb(255, 153, 0)',
+          backgroundColor: 'rgba(242, 250, 0, 0.9)',
+          borderColor: 'rgb(242, 250, 0)',
           borderWidth: 1,
           borderRadius: 4
         }]
