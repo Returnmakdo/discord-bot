@@ -1,22 +1,21 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const MapleCrawler = require('./services/crawler');
 const DiscordService = require('./services/discord');
 const Summarizer = require('./services/summarizer');
+const NexonApi = require('./services/nexonApi');
 const NoticeDB = require('./utils/database');
 const logger = require('./utils/logger');
 const fs = require('fs');
 const path = require('path');
-
-// 명령어 파일 로드
-const characterCommand = require('./commands/character');
 
 class MapleBot {
   constructor() {
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
       ]
     });
 
@@ -28,10 +27,7 @@ class MapleBot {
     this.intervalId = null;
     this.isRunning = false;
     this.isFirstRun = true; // 첫 실행 여부
-
-    // 슬래시 명령어 컬렉션
-    this.commands = new Collection();
-    this.commands.set(characterCommand.data.name, characterCommand);
+    this.nexonApi = new NexonApi();
   }
 
   // 초기화
@@ -46,9 +42,6 @@ class MapleBot {
 
       // Discord 서비스 초기화
       this.discord = new DiscordService(this.client);
-
-      // 슬래시 명령어 등록
-      await this.registerCommands();
 
       // 이벤트 핸들러 등록
       this.setupEventHandlers();
@@ -77,26 +70,6 @@ class MapleBot {
     });
   }
 
-  // 슬래시 명령어 등록 (길드 전용 - 즉시 반영)
-  async registerCommands() {
-    try {
-      const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
-      const commands = this.commands.map(cmd => cmd.data.toJSON());
-      const guildId = process.env.CHANNEL_ID_ALL;
-
-      logger.info(`슬래시 명령어 ${commands.length}개 등록 중... (서버: ${guildId})`);
-
-      await rest.put(
-        Routes.applicationGuildCommands(this.client.user.id, guildId),
-        { body: commands }
-      );
-
-      logger.info('슬래시 명령어 등록 완료');
-    } catch (error) {
-      logger.error('슬래시 명령어 등록 실패:', error);
-    }
-  }
-
   // 이벤트 핸들러 설정
   setupEventHandlers() {
     this.client.on('ready', () => {
@@ -108,31 +81,151 @@ class MapleBot {
       logger.error('Discord 클라이언트 에러:', error);
     });
 
-    // 슬래시 명령어 처리
-    this.client.on('interactionCreate', async (interaction) => {
-      if (!interaction.isChatInputCommand()) return;
+    // 메시지 명령어 처리 (!경험치 닉네임)
+    this.client.on('messageCreate', async (message) => {
+      if (message.author.bot) return;
+      if (!message.content.startsWith('!경험치')) return;
 
-      const command = this.commands.get(interaction.commandName);
-      if (!command) return;
-
-      try {
-        await command.execute(interaction);
-      } catch (error) {
-        logger.error(`명령어 실행 오류 (${interaction.commandName}):`, error);
-
-        const errorMessage = { content: '❌ 명령어 실행 중 오류가 발생했습니다.', ephemeral: true };
-
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(errorMessage);
-        } else {
-          await interaction.reply(errorMessage);
-        }
+      // 채널 제한
+      const allowedChannel = process.env.CHANNEL_ID_EXP;
+      if (allowedChannel && message.channelId !== allowedChannel) {
+        return;
       }
+
+      const args = message.content.slice('!경험치'.length).trim();
+      if (!args) {
+        return message.reply('❌ 사용법: `!경험치 캐릭터닉네임`');
+      }
+
+      await this.handleExpCommand(message, args);
     });
 
     // 종료 시그널 처리
     process.on('SIGINT', () => this.shutdown());
     process.on('SIGTERM', () => this.shutdown());
+  }
+
+  // 경험치 조회 명령어 처리
+  async handleExpCommand(message, characterName) {
+    try {
+      const loadingMsg = await message.reply('🔍 경험치 정보를 조회 중...');
+
+      // 1. OCID 조회
+      const ocid = await this.nexonApi.getCharacterOcid(characterName);
+      if (!ocid) {
+        return loadingMsg.edit(`❌ 캐릭터 "${characterName}"을(를) 찾을 수 없습니다.`);
+      }
+
+      // 2. 기본 정보 조회
+      const basicInfo = await this.nexonApi.getCharacterBasic(ocid);
+
+      // 3. 경험치 히스토리 조회 (최근 10일)
+      const history = await this.nexonApi.getExpHistoryRange(ocid, 10);
+
+      if (history.length < 2) {
+        return loadingMsg.edit(`❌ "${characterName}"의 경험치 히스토리 데이터가 충분하지 않습니다.`);
+      }
+
+      // 4. 경험치 변화량 계산
+      const changes = this.nexonApi.calculateExpChanges(history);
+
+      // 5. 통계 계산
+      const totalExpGain = changes.reduce((sum, c) => sum + c.expGain, 0);
+      const avgExpGain = totalExpGain / changes.length;
+
+      // 6. QuickChart.io로 그래프 생성
+      const chartUrl = this.generateChartUrl(changes);
+
+      // 7. Embed 생성
+      const embed = new EmbedBuilder()
+        .setColor(0xFF9900)
+        .setTitle('🍁 메이플스토리 경험치 히스토리')
+        .setDescription(`**📊 ${characterName}**\n${basicInfo.world_name} | Lv.${basicInfo.character_level} ${basicInfo.character_class}`)
+        .addFields(
+          { name: '─────────────────────', value: '\u200B', inline: false },
+          { name: '📈 10일간 총 획득', value: `${totalExpGain.toFixed(2)}%`, inline: true },
+          { name: '📊 일평균 획득', value: `${avgExpGain.toFixed(2)}%`, inline: true }
+        )
+        .setImage(chartUrl)
+        .setTimestamp()
+        .setFooter({ text: 'Nexon Open API' });
+
+      // 길드 정보가 있으면 추가
+      if (basicInfo.character_guild_name) {
+        embed.addFields({ name: '🎮 길드', value: basicInfo.character_guild_name, inline: true });
+      }
+
+      await loadingMsg.edit({ content: '', embeds: [embed] });
+      logger.info(`경험치 조회 완료: ${characterName}`);
+
+    } catch (error) {
+      logger.error(`경험치 조회 실패 (${characterName}):`, error);
+
+      let errorMessage = '❌ 경험치 조회 중 오류가 발생했습니다.';
+      if (error.message.includes('400')) {
+        errorMessage = `❌ 캐릭터 "${characterName}"을(를) 찾을 수 없습니다.`;
+      } else if (error.message.includes('429')) {
+        errorMessage = '❌ API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.';
+      }
+
+      await message.reply(errorMessage);
+    }
+  }
+
+  // QuickChart.io URL 생성
+  generateChartUrl(changes) {
+    const labels = changes.map(c => {
+      if (c.date === 'NOW') return 'NOW';
+      const date = new Date(c.date);
+      return `${date.getMonth() + 1}/${date.getDate()}`;
+    });
+
+    const data = changes.map(c => c.expGain.toFixed(2));
+
+    const chartConfig = {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '일일 경험치 획득량 (%)',
+          data: data,
+          fill: true,
+          backgroundColor: 'rgba(255, 153, 0, 0.2)',
+          borderColor: 'rgb(255, 153, 0)',
+          borderWidth: 2,
+          tension: 0.3,
+          pointBackgroundColor: 'rgb(255, 153, 0)',
+          pointRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: '#ffffff',
+              font: { size: 12 }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#ffffff' },
+            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#ffffff' },
+            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+          }
+        }
+      }
+    };
+
+    const encodedConfig = encodeURIComponent(JSON.stringify(chartConfig));
+    return `https://quickchart.io/chart?c=${encodedConfig}&backgroundColor=%23303030&width=500&height=300`;
   }
 
   // 주기적 업데이트 체크 시작
