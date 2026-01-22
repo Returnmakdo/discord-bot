@@ -136,8 +136,8 @@ class MapleBot {
       const totalExpGain = changes.reduce((sum, c) => sum + c.expGain, 0);
       const avgExpGain = totalExpGain / changes.length;
 
-      // 6. QuickChart.io로 그래프 생성
-      const chartUrl = this.generateChartUrl(changes);
+      // 6. QuickChart.io로 그래프 생성 (경험치율 히스토리)
+      const chartUrl = this.generateChartUrl(history);
 
       // 7. Embed 생성
       const embed = new EmbedBuilder()
@@ -175,22 +175,22 @@ class MapleBot {
     }
   }
 
-  // QuickChart.io URL 생성 (바 그래프)
-  generateChartUrl(changes) {
-    const labels = changes.map(c => {
-      if (c.date === 'NOW') return 'NOW';
-      const date = new Date(c.date);
+  // QuickChart.io URL 생성 (바 그래프 - 경험치율 히스토리)
+  generateChartUrl(history) {
+    const labels = history.map(h => {
+      if (h.date === 'NOW') return 'NOW';
+      const date = new Date(h.date);
       return `${date.getMonth() + 1}/${date.getDate()}`;
     });
 
-    const data = changes.map(c => parseFloat(c.expGain.toFixed(2)));
+    const data = history.map(h => parseFloat(h.expRate.toFixed(2)));
 
     const chartConfig = {
       type: 'bar',
       data: {
         labels: labels,
         datasets: [{
-          label: '일일 경험치 획득량 (%)',
+          label: '경험치 (%)',
           data: data,
           backgroundColor: 'rgba(255, 153, 0, 0.8)',
           borderColor: 'rgb(255, 153, 0)',
@@ -223,6 +223,7 @@ class MapleBot {
           },
           y: {
             beginAtZero: true,
+            max: 100,
             ticks: { color: '#ffffff' },
             grid: { color: 'rgba(255, 255, 255, 0.1)' }
           }
