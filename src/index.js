@@ -82,7 +82,7 @@ class MapleBot {
     try {
       const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
       const commands = this.commands.map(cmd => cmd.data.toJSON());
-      const guildId = process.env.GUILD_ID || '1463510406101209211';
+      const guildId = process.env.CHANNEL_ID_ALL;
 
       logger.info(`슬래시 명령어 ${commands.length}개 등록 중... (서버: ${guildId})`);
 

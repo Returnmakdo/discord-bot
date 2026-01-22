@@ -4,10 +4,10 @@ const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('닉네임')
+    .setName('경험치')
     .setDescription('캐릭터의 최근 10일 경험치 히스토리를 조회합니다')
     .addStringOption(option =>
-      option.setName('캐릭터')
+      option.setName('닉네임')
         .setDescription('조회할 캐릭터 닉네임')
         .setRequired(true)
     ),
@@ -22,7 +22,7 @@ module.exports = {
       });
     }
 
-    const characterName = interaction.options.getString('캐릭터');
+    const characterName = interaction.options.getString('닉네임');
 
     await interaction.deferReply();
 
