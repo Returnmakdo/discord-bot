@@ -77,16 +77,17 @@ class MapleBot {
     });
   }
 
-  // 슬래시 명령어 등록
+  // 슬래시 명령어 등록 (길드 전용 - 즉시 반영)
   async registerCommands() {
     try {
       const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
       const commands = this.commands.map(cmd => cmd.data.toJSON());
+      const guildId = process.env.GUILD_ID || '1463510406101209211';
 
-      logger.info(`슬래시 명령어 ${commands.length}개 등록 중...`);
+      logger.info(`슬래시 명령어 ${commands.length}개 등록 중... (서버: ${guildId})`);
 
       await rest.put(
-        Routes.applicationCommands(this.client.user.id),
+        Routes.applicationGuildCommands(this.client.user.id, guildId),
         { body: commands }
       );
 
