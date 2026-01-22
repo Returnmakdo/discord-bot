@@ -175,7 +175,7 @@ class MapleBot {
     }
   }
 
-  // QuickChart.io URL 생성
+  // QuickChart.io URL 생성 (바 그래프)
   generateChartUrl(changes) {
     const labels = changes.map(c => {
       if (c.date === 'NOW') return 'NOW';
@@ -183,40 +183,43 @@ class MapleBot {
       return `${date.getMonth() + 1}/${date.getDate()}`;
     });
 
-    const data = changes.map(c => c.expGain.toFixed(2));
+    const data = changes.map(c => parseFloat(c.expGain.toFixed(2)));
 
     const chartConfig = {
-      type: 'line',
+      type: 'bar',
       data: {
         labels: labels,
         datasets: [{
           label: '일일 경험치 획득량 (%)',
           data: data,
-          fill: true,
-          backgroundColor: 'rgba(255, 153, 0, 0.2)',
+          backgroundColor: 'rgba(255, 153, 0, 0.8)',
           borderColor: 'rgb(255, 153, 0)',
-          borderWidth: 2,
-          tension: 0.3,
-          pointBackgroundColor: 'rgb(255, 153, 0)',
-          pointRadius: 4
+          borderWidth: 1,
+          borderRadius: 4
         }]
       },
       options: {
         responsive: true,
         plugins: {
           legend: {
+            display: false
+          },
+          datalabels: {
             display: true,
-            position: 'top',
-            labels: {
-              color: '#ffffff',
-              font: { size: 12 }
-            }
+            color: '#ffffff',
+            anchor: 'end',
+            align: 'top',
+            font: {
+              weight: 'bold',
+              size: 11
+            },
+            formatter: (value) => value + '%'
           }
         },
         scales: {
           x: {
-            ticks: { color: '#ffffff' },
-            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+            ticks: { color: '#ffffff', font: { size: 11 } },
+            grid: { display: false }
           },
           y: {
             beginAtZero: true,
@@ -228,15 +231,13 @@ class MapleBot {
     };
 
     const encodedConfig = encodeURIComponent(JSON.stringify(chartConfig));
-    return `https://quickchart.io/chart?c=${encodedConfig}&backgroundColor=%23303030&width=500&height=300`;
+    return `https://quickchart.io/chart?c=${encodedConfig}&backgroundColor=%23303030&width=600&height=300`;
   }
 
   // 사용법 안내 게시 (최초 1회만)
   async postUsageGuide() {
-    const flagFile = path.join(__dirname, '..', 'data', 'usage_guide_posted.flag');
-
-    // 이미 게시했으면 스킵
-    if (fs.existsSync(flagFile)) {
+    // 환경변수로 이미 게시 여부 체크
+    if (process.env.USAGE_GUIDE_POSTED === 'true') {
       return;
     }
 
@@ -253,16 +254,13 @@ class MapleBot {
         .setDescription('메이플스토리 캐릭터의 최근 10일간 경험치 히스토리를 조회할 수 있습니다.')
         .addFields(
           { name: '📝 사용 방법', value: '```\n!경험치 캐릭터닉네임\n```', inline: false },
-          { name: '📌 예시', value: '`!경험치 김막도`\n`!경험치 섬치`', inline: false },
+          { name: '📌 예시', value: '`!경험치 김막도`\n`!경험치 삼지창`\n`!경험치 제빙`\n`!경험치 방난`', inline: false },
           { name: '📊 제공 정보', value: '• 캐릭터 기본 정보 (월드, 레벨, 직업)\n• 10일간 경험치 획득량 그래프\n• 총 획득량 및 일평균 획득량\n• 길드 정보', inline: false }
         )
         .setFooter({ text: 'Nexon Open API 기반 • 데이터는 매일 새벽 갱신됩니다' })
         .setTimestamp();
 
       await channel.send({ embeds: [embed] });
-
-      // 플래그 파일 생성
-      fs.writeFileSync(flagFile, new Date().toISOString());
       logger.info('경험치 조회 사용법 안내 게시 완료');
 
     } catch (error) {
