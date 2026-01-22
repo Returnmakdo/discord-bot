@@ -139,7 +139,7 @@ class MapleBot {
       // 6. QuickChart.io로 그래프 생성 (경험치율 히스토리)
       const chartUrl = this.generateChartUrl(history);
 
-      // 7. Embed 생성
+      // 7. Embed 생성 (이미지 제외)
       const embed = new EmbedBuilder()
         .setColor(0xFF9900)
         .setTitle('🍁 메이플스토리 경험치 히스토리')
@@ -149,7 +149,6 @@ class MapleBot {
           { name: '📈 10일간 총 획득', value: `${totalExpGain.toFixed(2)}%`, inline: true },
           { name: '📊 일평균 획득', value: `${avgExpGain.toFixed(2)}%`, inline: true }
         )
-        .setImage(chartUrl)
         .setTimestamp()
         .setFooter({ text: 'Nexon Open API' });
 
@@ -158,7 +157,11 @@ class MapleBot {
         embed.addFields({ name: '🎮 길드', value: basicInfo.character_guild_name, inline: true });
       }
 
+      // Embed 먼저 전송
       await loadingMsg.edit({ content: '', embeds: [embed] });
+
+      // 그래프 이미지 별도 전송 (더 크게 표시됨)
+      await message.channel.send(chartUrl);
       logger.info(`경험치 조회 완료: ${characterName}`);
 
     } catch (error) {
@@ -211,20 +214,20 @@ class MapleBot {
             align: 'top',
             font: {
               weight: 'bold',
-              size: 11
+              size: 14
             },
             formatter: (value) => value + '%'
           }
         },
         scales: {
           x: {
-            ticks: { color: '#ffffff', font: { size: 11 } },
+            ticks: { color: '#ffffff', font: { size: 14 } },
             grid: { display: false }
           },
           y: {
-            beginAtZero: true,
+            min: 0,
             max: 100,
-            ticks: { color: '#ffffff' },
+            ticks: { color: '#ffffff', font: { size: 12 } },
             grid: { color: 'rgba(255, 255, 255, 0.1)' }
           }
         }
