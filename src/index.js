@@ -177,8 +177,8 @@ class MapleBot {
         .setTitle('🍁 메이플스토리 경험치 히스토리')
         .setDescription(historyText)
         .addFields(
-          { name: '📊 일일 평균 획득량', value: this.formatExpNumber(avgExp).replace('+', ''), inline: true },
-          { name: '📦 남은 경험치량', value: this.formatExpNumber(remainingExp).replace('+', ''), inline: true },
+          { name: '📊 일일 평균 획득량', value: `${this.formatExpNumber(avgExp).replace('+', '')} (${avgExpGain.toFixed(2)}%)`, inline: true },
+          { name: '📦 남은 경험치량', value: `${this.formatExpNumber(remainingExp).replace('+', '')} (${remainingExpRate.toFixed(2)}%)`, inline: true },
           { name: '📅 예상 레벨업 날짜', value: levelUpDateText, inline: false }
         )
         .setTimestamp()
