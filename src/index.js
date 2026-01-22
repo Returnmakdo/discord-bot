@@ -46,6 +46,9 @@ class MapleBot {
       // 이벤트 핸들러 등록
       this.setupEventHandlers();
 
+      // 사용법 안내 게시 (최초 1회)
+      await this.postUsageGuide();
+
       // 주기적 체크 시작
       this.startPeriodicCheck();
 
@@ -226,6 +229,45 @@ class MapleBot {
 
     const encodedConfig = encodeURIComponent(JSON.stringify(chartConfig));
     return `https://quickchart.io/chart?c=${encodedConfig}&backgroundColor=%23303030&width=500&height=300`;
+  }
+
+  // 사용법 안내 게시 (최초 1회만)
+  async postUsageGuide() {
+    const flagFile = path.join(__dirname, '..', 'data', 'usage_guide_posted.flag');
+
+    // 이미 게시했으면 스킵
+    if (fs.existsSync(flagFile)) {
+      return;
+    }
+
+    const channelId = process.env.CHANNEL_ID_EXP;
+    if (!channelId) return;
+
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel) return;
+
+      const embed = new EmbedBuilder()
+        .setColor(0xFF9900)
+        .setTitle('🍁 경험치 조회 사용법')
+        .setDescription('메이플스토리 캐릭터의 최근 10일간 경험치 히스토리를 조회할 수 있습니다.')
+        .addFields(
+          { name: '📝 사용 방법', value: '```\n!경험치 캐릭터닉네임\n```', inline: false },
+          { name: '📌 예시', value: '`!경험치 김막도`\n`!경험치 섬치`', inline: false },
+          { name: '📊 제공 정보', value: '• 캐릭터 기본 정보 (월드, 레벨, 직업)\n• 10일간 경험치 획득량 그래프\n• 총 획득량 및 일평균 획득량\n• 길드 정보', inline: false }
+        )
+        .setFooter({ text: 'Nexon Open API 기반 • 데이터는 매일 새벽 갱신됩니다' })
+        .setTimestamp();
+
+      await channel.send({ embeds: [embed] });
+
+      // 플래그 파일 생성
+      fs.writeFileSync(flagFile, new Date().toISOString());
+      logger.info('경험치 조회 사용법 안내 게시 완료');
+
+    } catch (error) {
+      logger.error('사용법 안내 게시 실패:', error);
+    }
   }
 
   // 주기적 업데이트 체크 시작
