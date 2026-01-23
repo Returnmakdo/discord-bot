@@ -4,6 +4,7 @@ const MapleCrawler = require('./services/crawler');
 const DiscordService = require('./services/discord');
 const Summarizer = require('./services/summarizer');
 const NexonApi = require('./services/nexonApi');
+const MusicService = require('./services/music');
 const NoticeDB = require('./utils/database');
 const logger = require('./utils/logger');
 const fs = require('fs');
@@ -15,7 +16,8 @@ class MapleBot {
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates
       ]
     });
 
@@ -28,6 +30,7 @@ class MapleBot {
     this.isRunning = false;
     this.isFirstRun = true; // 첫 실행 여부
     this.nexonApi = new NexonApi();
+    this.music = null;
   }
 
   // 초기화
@@ -42,6 +45,10 @@ class MapleBot {
 
       // Discord 서비스 초기화
       this.discord = new DiscordService(this.client);
+
+      // 음악 서비스 초기화
+      this.music = new MusicService();
+      logger.info('음악 서비스 초기화 완료');
 
       // 이벤트 핸들러 등록
       this.setupEventHandlers();
@@ -84,23 +91,27 @@ class MapleBot {
       logger.error('Discord 클라이언트 에러:', error);
     });
 
-    // 메시지 명령어 처리 (!경험치 닉네임)
+    // 메시지 명령어 처리
     this.client.on('messageCreate', async (message) => {
       if (message.author.bot) return;
-      if (!message.content.startsWith('!경험치')) return;
+      if (!message.content.startsWith('!')) return;
 
-      // 채널 제한
-      const allowedChannel = process.env.CHANNEL_ID_EXP;
-      if (allowedChannel && message.channelId !== allowedChannel) {
-        return;
+      // 경험치 명령어
+      if (message.content.startsWith('!경험치')) {
+        const allowedChannel = process.env.CHANNEL_ID_EXP;
+        if (allowedChannel && message.channelId !== allowedChannel) return;
+
+        const args = message.content.slice('!경험치'.length).trim();
+        if (!args) {
+          return message.reply('❌ 사용법: `!경험치 캐릭터닉네임`');
+        }
+        return this.handleExpCommand(message, args);
       }
 
-      const args = message.content.slice('!경험치'.length).trim();
-      if (!args) {
-        return message.reply('❌ 사용법: `!경험치 캐릭터닉네임`');
+      // 음악 명령어
+      if (this.music) {
+        await this.handleMusicCommand(message);
       }
-
-      await this.handleExpCommand(message, args);
     });
 
     // 종료 시그널 처리
@@ -214,6 +225,42 @@ class MapleBot {
       } else {
         await message.reply(errorMessage);
       }
+    }
+  }
+
+  // 음악 명령어 처리
+  async handleMusicCommand(message) {
+    const content = message.content;
+
+    try {
+      if (content.startsWith('!재생')) {
+        const query = content.slice('!재생'.length).trim();
+        if (!query) {
+          return message.reply('❌ 사용법: `!재생 <검색어 또는 URL>`');
+        }
+        await this.music.play(message, query);
+      } else if (content === '!스킵') {
+        await this.music.skip(message);
+      } else if (content === '!정지') {
+        await this.music.stop(message);
+      } else if (content === '!일시정지') {
+        await this.music.pause(message);
+      } else if (content === '!재개') {
+        await this.music.resume(message);
+      } else if (content === '!큐') {
+        await this.music.queue(message);
+      } else if (content === '!현재곡') {
+        await this.music.nowPlaying(message);
+      } else if (content.startsWith('!음량')) {
+        const vol = content.slice('!음량'.length).trim();
+        if (!vol) {
+          return message.reply('❌ 사용법: `!음량 <0-100>`');
+        }
+        await this.music.volume(message, vol);
+      }
+    } catch (error) {
+      logger.error('음악 명령어 처리 에러:', error);
+      await message.reply('❌ 음악 명령어 처리 중 오류가 발생했습니다.').catch(() => {});
     }
   }
 
