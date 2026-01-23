@@ -67,6 +67,28 @@ class MapleCrawler {
     }
   }
 
+  // 이벤트 상세 페이지에서 대표 이미지 가져오기
+  async fetchEventImage(url) {
+    try {
+      const response = await this.fetchWithRetry(url);
+      const $ = cheerio.load(response.data);
+
+      // 본문 내 첫 번째 이미지 URL 추출
+      const $content = $('.new_board_con');
+      if ($content.length) {
+        const imgSrc = $content.find('img').first().attr('src');
+        if (imgSrc) {
+          return imgSrc;
+        }
+      }
+
+      return '';
+    } catch (error) {
+      logger.warn(`이벤트 이미지 크롤링 실패: ${url}`);
+      return '';
+    }
+  }
+
   // 재시도 로직이 포함된 HTTP 요청
   async fetchWithRetry(url, attempt = 1) {
     try {
@@ -169,17 +191,25 @@ class MapleCrawler {
       // 최근 5개만 가져오기
       $('.event_board ul li').slice(0, 5).each((index, element) => {
         const $elem = $(element);
-        const $link = $elem.find('a');
+        const $link = $elem.find('dd.data p a');
         const href = $link.attr('href');
 
         if (!href) return;
 
-        const title = $elem.find('p.tit').text().trim() || $elem.find('.tit').text().trim();
+        // 제목 추출: "수정" 표시 제거 후 span + em 텍스트 합치기
+        const $titleLink = $link.clone();
+        $titleLink.find('em.modify_common').remove();
+        const title = $titleLink.text().trim().replace(/\s+/g, ' ');
+
+        // 썸네일 이미지
+        const thumbnail = $elem.find('dt a img').attr('src') || '';
+
         const event = {
           id: `event_${href.split('/').pop()}`,
           title: title,
           link: `${this.baseUrl}${href}`,
-          date: $elem.find('.date').text().trim() || $elem.find('.heart_date dd').text().trim(),
+          date: $elem.find('dd.date p').text().trim(),
+          thumbnail: thumbnail,
           category: 'event'
         };
 

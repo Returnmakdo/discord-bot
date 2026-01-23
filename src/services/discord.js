@@ -41,6 +41,8 @@ class DiscordService {
       notice: '📢 일반 공지'
     };
 
+    const dateLabel = notice.category === 'event' ? '📅 기간' : '📅 작성일';
+
     const embed = new EmbedBuilder()
       .setColor(color)
       .setAuthor({
@@ -55,7 +57,7 @@ class DiscordService {
           inline: true
         },
         {
-          name: '📅 작성일',
+          name: dateLabel,
           value: `\`${notice.date}\``,
           inline: true
         },
@@ -99,6 +101,11 @@ class DiscordService {
 
       const embed = this.createEmbed(notice);
       await channel.send({ embeds: [embed] });
+
+      // 이벤트 이미지가 있으면 embed 뒤에 첨부파일로 전송
+      if (notice.image) {
+        await channel.send({ files: [notice.image] });
+      }
 
       logger.info(`메시지 전송 완료: [${notice.category}] ${notice.title}`);
       return true;

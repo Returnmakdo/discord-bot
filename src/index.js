@@ -425,6 +425,14 @@ class MapleBot {
         // 상세 내용 가져오기
         const rawContent = await this.crawler.fetchContent(notice.link);
 
+        // 이벤트인 경우 상세 페이지에서 대표 이미지 가져오기
+        if (notice.category === 'event') {
+          const eventImage = await this.crawler.fetchEventImage(notice.link);
+          if (eventImage) {
+            notice.image = eventImage;
+          }
+        }
+
         // AI 요약 (업데이트/이벤트인 경우)
         if ((notice.category === 'update' || notice.category === 'event') && rawContent) {
           notice.content = await this.summarizer.summarize(rawContent, notice.title);
