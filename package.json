@@ -1,6 +1,6 @@
 {
   "name": "maple-discord-bot",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "메이플스토리 업데이트 자동 알림 봇",
   "main": "src/index.js",
   "scripts": {
