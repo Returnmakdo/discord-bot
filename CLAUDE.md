@@ -13,3 +13,4 @@ git add . && git commit -m "메시지" && git push origin main && railway up -s 
 - 큰 변경: `vX.0.0` (major)
 - 배포 시 `package.json` version도 함께 업데이트
 - git tag: `git tag v1.3.0 && git push origin --tags`
+- 배포 시 반드시: package.json version 업데이트 + README 업데이트 로그 추가 + git tag
