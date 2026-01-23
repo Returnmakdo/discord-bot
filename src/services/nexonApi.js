@@ -72,7 +72,7 @@ class NexonApi {
         exp: todayData.character_exp,
         expRate: parseFloat(todayData.character_exp_rate)
       });
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 300));
     } catch (error) {
       logger.warn('오늘 경험치 조회 실패:', error.message);
     }
@@ -98,7 +98,7 @@ class NexonApi {
       }
 
       // Rate limit 방지
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     // 날짜 오름차순 정렬 (NOW는 맨 마지막)

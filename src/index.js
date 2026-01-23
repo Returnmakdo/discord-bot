@@ -110,8 +110,9 @@ class MapleBot {
 
   // 경험치 조회 명령어 처리
   async handleExpCommand(message, characterName) {
+    let loadingMsg = null;
     try {
-      const loadingMsg = await message.reply('🔍 경험치 정보를 조회 중...');
+      loadingMsg = await message.reply('🔍 경험치 정보를 조회 중...');
 
       // 1. OCID 조회
       const ocid = await this.nexonApi.getCharacterOcid(characterName);
@@ -205,10 +206,14 @@ class MapleBot {
       if (error.message.includes('400')) {
         errorMessage = `❌ 캐릭터 "${characterName}"을(를) 찾을 수 없습니다.`;
       } else if (error.message.includes('429')) {
-        errorMessage = '❌ API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.';
+        errorMessage = '❌ API 요청이 너무 빠릅니다. 잠시 후 다시 시도해주세요.';
       }
 
-      await message.reply(errorMessage);
+      if (loadingMsg) {
+        await loadingMsg.edit(errorMessage);
+      } else {
+        await message.reply(errorMessage);
+      }
     }
   }
 
