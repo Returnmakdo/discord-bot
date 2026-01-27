@@ -1,6 +1,8 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
-const ytdl = require('@ybd-project/ytdl-core');
+const { YtdlCore } = require('@ybd-project/ytdl-core');
 const ffmpegPath = require('ffmpeg-static');
+
+const ytdl = new YtdlCore();
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 
@@ -53,7 +55,7 @@ class MusicService {
       }
 
       // 비디오 정보 가져오기
-      const info = await ytdl.getInfo(videoUrl);
+      const info = await ytdl.getFullInfo(videoUrl);
       const details = info.videoDetails;
 
       trackInfo = {
@@ -185,10 +187,9 @@ class MusicService {
     guildData.current = track;
 
     try {
-      const stream = ytdl(track.url, {
+      const stream = await ytdl.download(track.url, {
         filter: 'audioonly',
         quality: 'highestaudio',
-        highWaterMark: 1 << 25,
       });
 
       const resource = createAudioResource(stream, {
