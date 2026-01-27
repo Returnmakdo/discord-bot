@@ -8,10 +8,18 @@ class MusicService {
     this.client = client;
     this.distube = new DisTube(client, {
       emitNewSongOnly: true,
-      plugins: [new YouTubePlugin()],
+      plugins: [
+        new YouTubePlugin({
+          ytdlOptions: {
+            highWaterMark: 1 << 25,
+            quality: 'highestaudio',
+          },
+        }),
+      ],
     });
 
     this.setupEvents();
+    logger.info('DisTube 초기화 완료');
   }
 
   setupEvents() {
@@ -21,7 +29,7 @@ class MusicService {
         .setTitle('🎵 재생 시작')
         .setDescription(`[${song.name}](${song.url})`)
         .addFields(
-          { name: '길이', value: song.formattedDuration, inline: true },
+          { name: '길이', value: song.formattedDuration || '알 수 없음', inline: true },
           { name: '요청자', value: song.user?.tag || '알 수 없음', inline: true }
         );
       if (song.thumbnail) embed.setThumbnail(song.thumbnail);
@@ -34,7 +42,7 @@ class MusicService {
         .setTitle('➕ 대기열에 추가')
         .setDescription(`[${song.name}](${song.url})`)
         .addFields(
-          { name: '길이', value: song.formattedDuration, inline: true },
+          { name: '길이', value: song.formattedDuration || '알 수 없음', inline: true },
           { name: '대기열', value: `${queue.songs.length}번째`, inline: true }
         );
       if (song.thumbnail) embed.setThumbnail(song.thumbnail);
@@ -49,9 +57,17 @@ class MusicService {
       queue.textChannel?.send('👋 음성 채널에서 퇴장했습니다.').catch(() => {});
     });
 
-    this.distube.on('error', (channel, error) => {
-      logger.error('DisTube 에러:', error);
-      channel?.send(`❌ 오류: ${error.message}`).catch(() => {});
+    // DisTube v5 에러 핸들러 시그니처: (error, queue, song)
+    this.distube.on('error', (error, queue, song) => {
+      logger.error('DisTube 에러:', error.message);
+      if (queue?.textChannel) {
+        queue.textChannel.send(`❌ 재생 오류: ${error.message}`).catch(() => {});
+      }
+    });
+
+    // ffmpeg 에러 처리
+    this.distube.on('ffmpegDebug', (debug) => {
+      logger.debug('FFmpeg:', debug);
     });
   }
 
@@ -62,14 +78,15 @@ class MusicService {
     }
 
     try {
+      await message.reply(`🔍 검색 중: **${query}**`);
       await this.distube.play(voiceChannel, query, {
         member: message.member,
         textChannel: message.channel,
         message,
       });
     } catch (error) {
-      logger.error('재생 실패:', error);
-      return message.reply(`❌ 재생 실패: ${error.message}`);
+      logger.error('재생 실패:', error.message);
+      return message.channel.send(`❌ 재생 실패: ${error.message}`);
     }
   }
 
@@ -79,8 +96,12 @@ class MusicService {
       return message.reply('❌ 현재 재생 중인 곡이 없습니다.');
     }
     const song = queue.songs[0];
-    await queue.skip();
-    await message.reply(`⏭️ 스킵: **${song.name}**`);
+    try {
+      await queue.skip();
+      await message.reply(`⏭️ 스킵: **${song.name}**`);
+    } catch (error) {
+      await message.reply('❌ 스킵할 곡이 없습니다.');
+    }
   }
 
   async stop(message) {
@@ -123,12 +144,12 @@ class MusicService {
     }
 
     const current = queue.songs[0];
-    let description = `**현재 재생 중:**\n🎵 [${current.name}](${current.url}) - ${current.formattedDuration}\n`;
+    let description = `**현재 재생 중:**\n🎵 [${current.name}](${current.url}) - ${current.formattedDuration || '알 수 없음'}\n`;
 
     if (queue.songs.length > 1) {
       description += '\n**대기열:**\n';
       queue.songs.slice(1, 11).forEach((song, i) => {
-        description += `${i + 1}. [${song.name}](${song.url}) - ${song.formattedDuration}\n`;
+        description += `${i + 1}. [${song.name}](${song.url}) - ${song.formattedDuration || '알 수 없음'}\n`;
       });
       if (queue.songs.length > 11) {
         description += `\n... 그 외 ${queue.songs.length - 11}곡`;
@@ -156,7 +177,7 @@ class MusicService {
       .setTitle('🎵 현재 재생 중')
       .setDescription(`[${song.name}](${song.url})`)
       .addFields(
-        { name: '길이', value: song.formattedDuration, inline: true },
+        { name: '길이', value: song.formattedDuration || '알 수 없음', inline: true },
         { name: '요청자', value: song.user?.tag || '알 수 없음', inline: true }
       );
     if (song.thumbnail) embed.setThumbnail(song.thumbnail);
