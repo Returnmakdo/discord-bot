@@ -187,16 +187,13 @@ class MusicService {
 
     try {
       // youtubei.js로 스트림 가져오기
-      const info = await this.youtube.getBasicInfo(track.id);
-      const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+      const info = await this.youtube.getInfo(track.id);
+      const stream = await info.download({
+        type: 'audio',
+        quality: 'best',
+      });
 
-      if (!format) {
-        throw new Error('오디오 포맷을 찾을 수 없습니다');
-      }
-
-      const streamUrl = format.decipher(this.youtube.session.player);
-
-      const resource = createAudioResource(streamUrl, {
+      const resource = createAudioResource(stream, {
         inputType: StreamType.Arbitrary,
         inlineVolume: true,
       });
