@@ -76,7 +76,12 @@ class MusicService {
 
     try {
       await message.reply(`🔍 검색 중: **${query}**`);
-      await this.distube.play(voiceChannel, query, {
+
+      // URL이 아니면 ytsearch: 프리픽스 추가
+      const isUrl = query.startsWith('http://') || query.startsWith('https://');
+      const searchQuery = isUrl ? query : `ytsearch:${query}`;
+
+      await this.distube.play(voiceChannel, searchQuery, {
         member: message.member,
         textChannel: message.channel,
         message,
