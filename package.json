@@ -1,6 +1,9 @@
 {
   "name": "maple-discord-bot",
-  "version": "1.4.0",
+  "version": "1.4.1",
+  "engines": {
+    "node": ">=20.18.1"
+  },
   "description": "메이플스토리 업데이트 자동 알림 봇",
   "main": "src/index.js",
   "scripts": {
@@ -17,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@discordjs/voice": "^0.18.0",
+    "@distube/ytdl-core": "^4.16.12",
     "axios": "^1.6.5",
     "better-sqlite3": "^9.2.2",
     "cheerio": "^1.0.0-rc.12",
