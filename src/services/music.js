@@ -1,6 +1,5 @@
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } = require('@discordjs/voice');
-const ytdl = require('@distube/ytdl-core');
-const play = require('play-dl'); // 검색용
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require('@discordjs/voice');
+const play = require('play-dl');
 const ffmpegPath = require('ffmpeg-static');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
@@ -149,15 +148,10 @@ class MusicService {
     guildData.current = track;
 
     try {
-      // @distube/ytdl-core로 스트림 가져오기
-      const stream = ytdl(track.url, {
-        filter: 'audioonly',
-        quality: 'highestaudio',
-        highWaterMark: 1 << 25, // 32MB 버퍼
-      });
-
-      const resource = createAudioResource(stream, {
-        inputType: StreamType.Arbitrary,
+      // play-dl로 스트림 가져오기
+      const stream = await play.stream(track.url);
+      const resource = createAudioResource(stream.stream, {
+        inputType: stream.type,
         inlineVolume: true,
       });
       resource.volume?.setVolume(guildData.volume / 100);
