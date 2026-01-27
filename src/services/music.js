@@ -53,6 +53,9 @@ class MusicService {
         return message.reply('❌ 검색 결과가 없습니다.');
       }
 
+      // 디버깅: 검색 결과 확인
+      logger.info(`검색 결과: ${JSON.stringify(result[0], null, 2)}`);
+
       trackInfo = {
         title: result[0].title,
         url: result[0].url,
@@ -149,6 +152,7 @@ class MusicService {
 
     try {
       // play-dl로 스트림 가져오기
+      logger.info(`스트림 URL: ${track.url}`);
       const stream = await play.stream(track.url);
       const resource = createAudioResource(stream.stream, {
         inputType: stream.type,
