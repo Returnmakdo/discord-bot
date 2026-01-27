@@ -20,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@discordjs/voice": "^0.18.0",
+    "@ybd-project/ytdl-core": "^6.0.8",
     "axios": "^1.6.5",
     "better-sqlite3": "^9.2.2",
     "cheerio": "^1.0.0-rc.12",

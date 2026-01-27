@@ -1,5 +1,5 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
-const { Innertube } = require('youtubei.js');
+const ytdl = require('@ybd-project/ytdl-core');
 const ffmpegPath = require('ffmpeg-static');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
@@ -11,17 +11,6 @@ class MusicService {
   constructor() {
     // 길드별 큐 관리: { guildId: { queue: [], player, connection, current, volume } }
     this.guilds = new Map();
-    this.youtube = null;
-    this.initYoutube();
-  }
-
-  async initYoutube() {
-    try {
-      this.youtube = await Innertube.create();
-      logger.info('YouTube 클라이언트 초기화 완료');
-    } catch (error) {
-      logger.error('YouTube 클라이언트 초기화 실패:', error);
-    }
   }
 
   getGuildData(guildId) {
@@ -45,57 +34,40 @@ class MusicService {
       return message.reply('❌ 먼저 음성 채널에 접속해주세요.');
     }
 
-    if (!this.youtube) {
-      await this.initYoutube();
-      if (!this.youtube) {
-        return message.reply('❌ YouTube 서비스를 초기화할 수 없습니다.');
-      }
-    }
-
     const guildData = this.getGuildData(message.guild.id);
     guildData.textChannel = message.channel;
 
-    // 검색
+    // 검색/URL 처리
     let trackInfo;
     try {
+      let videoUrl;
       const isUrl = query.startsWith('http');
-      let videoId;
-      let videoInfo;
 
       if (isUrl) {
-        // URL에서 video ID 추출
-        const urlMatch = query.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (urlMatch) {
-          videoId = urlMatch[1];
-        } else {
-          return message.reply('❌ 유효하지 않은 YouTube URL입니다.');
-        }
-        videoInfo = await this.youtube.getBasicInfo(videoId);
+        videoUrl = query;
       } else {
-        // 검색
-        const searchResults = await this.youtube.search(query, { type: 'video' });
-        const videos = searchResults.results.filter(r => r.type === 'Video');
-        if (!videos || videos.length === 0) {
-          return message.reply('❌ 검색 결과가 없습니다.');
-        }
-        videoId = videos[0].id;
-        videoInfo = await this.youtube.getBasicInfo(videoId);
+        // 검색어로 YouTube 검색 (ytdl-core는 검색 기능이 없으므로 직접 URL 생성)
+        const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+        // ytdl로 검색 불가능하므로 ytsearch 사용
+        videoUrl = `https://www.youtube.com/watch?v=${await this.searchYoutube(query)}`;
       }
 
-      const details = videoInfo.basic_info;
+      // 비디오 정보 가져오기
+      const info = await ytdl.getInfo(videoUrl);
+      const details = info.videoDetails;
+
       trackInfo = {
-        id: videoId,
+        url: videoUrl,
         title: details.title,
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        duration: this.formatDuration(details.duration),
-        durationMs: details.duration * 1000,
-        thumbnail: details.thumbnail?.[0]?.url || null,
-        author: details.author || '알 수 없음',
+        duration: this.formatDuration(parseInt(details.lengthSeconds)),
+        durationMs: parseInt(details.lengthSeconds) * 1000,
+        thumbnail: details.thumbnails?.[details.thumbnails.length - 1]?.url || null,
+        author: details.author?.name || '알 수 없음',
         requester: message.author.tag,
       };
     } catch (error) {
-      logger.error('YouTube 검색 실패:', error);
-      return message.reply('❌ 검색 중 오류가 발생했습니다.');
+      logger.error('YouTube 검색/정보 가져오기 실패:', error);
+      return message.reply('❌ 영상을 찾을 수 없거나 오류가 발생했습니다.');
     }
 
     guildData.queue.push(trackInfo);
@@ -134,7 +106,6 @@ class MusicService {
       guildData.player = createAudioPlayer();
 
       guildData.player.on(AudioPlayerStatus.Idle, () => {
-        // 다음 곡 재생
         guildData.queue.shift();
         if (guildData.queue.length > 0) {
           this.playNext(message.guild.id);
@@ -143,7 +114,6 @@ class MusicService {
           if (guildData.textChannel) {
             guildData.textChannel.send('🔇 대기열의 모든 곡이 끝났습니다.').catch(() => {});
           }
-          // 30초 후 자동 퇴장
           setTimeout(() => {
             const data = this.guilds.get(message.guild.id);
             if (data && data.queue.length === 0) {
@@ -167,12 +137,41 @@ class MusicService {
       guildData.connection.subscribe(guildData.player);
     }
 
-    // 첫 곡 재생
     await this.playNext(message.guild.id);
   }
 
+  // YouTube 검색 (간단한 스크래핑)
+  async searchYoutube(query) {
+    try {
+      const https = require('https');
+      const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+
+      return new Promise((resolve, reject) => {
+        https.get(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            // videoId 추출
+            const match = data.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
+            if (match) {
+              resolve(match[1]);
+            } else {
+              reject(new Error('검색 결과 없음'));
+            }
+          });
+        }).on('error', reject);
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+
   formatDuration(seconds) {
-    if (!seconds) return '실시간';
+    if (!seconds || isNaN(seconds)) return '실시간';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -186,11 +185,10 @@ class MusicService {
     guildData.current = track;
 
     try {
-      // youtubei.js로 스트림 가져오기
-      const info = await this.youtube.getInfo(track.id);
-      const stream = await info.download({
-        type: 'audio',
-        quality: 'best',
+      const stream = ytdl(track.url, {
+        filter: 'audioonly',
+        quality: 'highestaudio',
+        highWaterMark: 1 << 25,
       });
 
       const resource = createAudioResource(stream, {
@@ -202,7 +200,6 @@ class MusicService {
       guildData.player.play(resource);
       guildData.currentResource = resource;
 
-      // 재생 시작 알림
       const embed = new EmbedBuilder()
         .setColor(0x00FF00)
         .setTitle('🎵 재생 시작')
@@ -228,30 +225,25 @@ class MusicService {
     }
   }
 
-  // 스킵
   async skip(message) {
     const guildData = this.guilds.get(message.guild.id);
     if (!guildData?.player || guildData.player.state.status === AudioPlayerStatus.Idle) {
       return message.reply('❌ 현재 재생 중인 곡이 없습니다.');
     }
-
     const title = guildData.current?.title || '알 수 없음';
-    guildData.player.stop(); // Idle 이벤트가 트리거되어 다음 곡 재생
+    guildData.player.stop();
     await message.reply(`⏭️ 스킵: **${title}**`);
   }
 
-  // 정지 + 퇴장
   async stop(message) {
     const guildData = this.guilds.get(message.guild.id);
     if (!guildData?.connection) {
       return message.reply('❌ 현재 재생 중인 곡이 없습니다.');
     }
-
     this.cleanup(message.guild.id);
     await message.reply('⏹️ 재생을 정지하고 퇴장합니다.');
   }
 
-  // 일시정지
   async pause(message) {
     const guildData = this.guilds.get(message.guild.id);
     if (!guildData?.player || guildData.player.state.status === AudioPlayerStatus.Idle) {
@@ -260,12 +252,10 @@ class MusicService {
     if (guildData.player.state.status === AudioPlayerStatus.Paused) {
       return message.reply('❌ 이미 일시정지 상태입니다.');
     }
-
     guildData.player.pause();
     await message.reply('⏸️ 일시정지했습니다.');
   }
 
-  // 재개
   async resume(message) {
     const guildData = this.guilds.get(message.guild.id);
     if (!guildData?.player) {
@@ -274,12 +264,10 @@ class MusicService {
     if (guildData.player.state.status !== AudioPlayerStatus.Paused) {
       return message.reply('❌ 일시정지 상태가 아닙니다.');
     }
-
     guildData.player.unpause();
     await message.reply('▶️ 다시 재생합니다.');
   }
 
-  // 대기열 표시
   async queue(message) {
     const guildData = this.guilds.get(message.guild.id);
     if (!guildData?.current) {
@@ -309,7 +297,6 @@ class MusicService {
     await message.reply({ embeds: [embed] });
   }
 
-  // 현재곡
   async nowPlaying(message) {
     const guildData = this.guilds.get(message.guild.id);
     if (!guildData?.current) {
@@ -331,7 +318,6 @@ class MusicService {
     await message.reply({ embeds: [embed] });
   }
 
-  // 볼륨
   async volume(message, vol) {
     const guildData = this.guilds.get(message.guild.id);
     if (!guildData?.player || guildData.player.state.status === AudioPlayerStatus.Idle) {
@@ -350,7 +336,6 @@ class MusicService {
     await message.reply(`🔊 음량: **${volume}%**`);
   }
 
-  // 정리
   cleanup(guildId) {
     const guildData = this.guilds.get(guildId);
     if (!guildData) return;
