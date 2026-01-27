@@ -3,7 +3,7 @@ nixPkgs = ["nodejs_20", "ffmpeg"]
 
 [phases.install]
 dependsOn = ["setup"]
-cmds = ["npm install --legacy-peer-deps"]
+cmds = ["npm install"]
 
 [start]
 cmd = "npm start"
