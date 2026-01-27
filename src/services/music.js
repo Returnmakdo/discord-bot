@@ -1,5 +1,5 @@
 const { DisTube } = require('distube');
-const { YtDlpPlugin } = require('@distube/yt-dlp');
+const { YouTubePlugin } = require('@distube/youtube');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 
@@ -8,7 +8,7 @@ class MusicService {
     this.client = client;
     this.distube = new DisTube(client, {
       emitNewSongOnly: true,
-      plugins: [new YtDlpPlugin({ update: true })],
+      plugins: [new YouTubePlugin()],
     });
 
     this.setupEvents();
