@@ -1,6 +1,7 @@
 const { DisTube } = require('distube');
 const { YtDlpPlugin } = require('@distube/yt-dlp');
 const { EmbedBuilder } = require('discord.js');
+const { spawn } = require('child_process');
 const logger = require('../utils/logger');
 
 class MusicService {
@@ -17,6 +18,40 @@ class MusicService {
 
     this.setupEvents();
     logger.info('DisTube + yt-dlp 초기화 완료');
+  }
+
+  // yt-dlp로 YouTube 검색하여 URL 가져오기
+  searchYouTube(query) {
+    return new Promise((resolve, reject) => {
+      const args = [
+        '--default-search', 'ytsearch',
+        '--no-playlist',
+        '--print', 'webpage_url',
+        '-f', 'bestaudio',
+        `ytsearch1:${query}`
+      ];
+
+      const ytdlp = spawn('yt-dlp', args);
+      let output = '';
+      let error = '';
+
+      ytdlp.stdout.on('data', (data) => { output += data.toString(); });
+      ytdlp.stderr.on('data', (data) => { error += data.toString(); });
+
+      ytdlp.on('close', (code) => {
+        if (code !== 0 || !output.trim()) {
+          logger.error('yt-dlp 검색 실패:', error);
+          reject(new Error('검색 결과를 찾을 수 없습니다.'));
+          return;
+        }
+        resolve(output.trim());
+      });
+
+      ytdlp.on('error', (err) => {
+        logger.error('yt-dlp 실행 오류:', err);
+        reject(err);
+      });
+    });
   }
 
   setupEvents() {
@@ -75,13 +110,17 @@ class MusicService {
     }
 
     try {
-      await message.reply(`🔍 검색 중: **${query}**`);
-
-      // URL이 아니면 ytsearch: 프리픽스 추가
       const isUrl = query.startsWith('http://') || query.startsWith('https://');
-      const searchQuery = isUrl ? query : `ytsearch:${query}`;
+      let videoUrl = query;
 
-      await this.distube.play(voiceChannel, searchQuery, {
+      // URL이 아니면 yt-dlp로 검색
+      if (!isUrl) {
+        await message.reply(`🔍 검색 중: **${query}**`);
+        videoUrl = await this.searchYouTube(query);
+        logger.info(`검색 결과: ${videoUrl}`);
+      }
+
+      await this.distube.play(voiceChannel, videoUrl, {
         member: message.member,
         textChannel: message.channel,
         message,
