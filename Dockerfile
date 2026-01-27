@@ -1,8 +1,12 @@
 FROM node:20-slim
 
-# ffmpeg 및 빌드 도구 설치
+# ffmpeg 및 오디오 코덱, 빌드 도구 설치
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    libopus0 \
+    libopus-dev \
+    libsodium23 \
+    libsodium-dev \
     python3 \
     build-essential \
     && apt-get clean \
