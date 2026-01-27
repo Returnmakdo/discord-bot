@@ -1,8 +1,12 @@
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState, StreamType } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
 const play = require('play-dl'); // 검색용
+const ffmpegPath = require('ffmpeg-static');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
+
+// FFmpeg 경로 설정
+process.env.FFMPEG_PATH = ffmpegPath;
 
 class MusicService {
   constructor() {
