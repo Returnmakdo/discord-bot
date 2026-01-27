@@ -1,10 +1,11 @@
 FROM node:20-slim
 
-# ffmpeg와 yt-dlp 설치
+# 빌드 도구 및 ffmpeg, yt-dlp 설치
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
     python3-pip \
+    build-essential \
     && pip3 install --break-system-packages yt-dlp \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
