@@ -1,4 +1,5 @@
 const { Player } = require('discord-player');
+const { DefaultExtractors } = require('@discord-player/extractor');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 
@@ -19,7 +20,7 @@ class MusicService {
       });
 
       // extractor 로드
-      await this.player.extractors.loadDefault();
+      await this.player.extractors.loadMulti(DefaultExtractors);
 
       // 이벤트 핸들러
       this.player.events.on('playerStart', (queue, track) => {
