@@ -233,26 +233,26 @@ class MapleBot {
     const content = message.content;
 
     try {
-      if (content.startsWith('!재생')) {
-        const query = content.slice('!재생'.length).trim();
+      if (content.startsWith('!재생') || content.startsWith('!play') || content.startsWith('!p ')) {
+        const query = content.replace(/^!(재생|play|p)\s*/, '').trim();
         if (!query) {
           return message.reply('❌ 사용법: `!재생 <검색어 또는 URL>`');
         }
         await this.music.play(message, query);
-      } else if (content === '!스킵') {
+      } else if (content === '!스킵' || content === '!skip' || content === '!s') {
         await this.music.skip(message);
-      } else if (content === '!정지') {
+      } else if (content === '!정지' || content === '!stop') {
         await this.music.stop(message);
-      } else if (content === '!일시정지') {
+      } else if (content === '!일시정지' || content === '!pause') {
         await this.music.pause(message);
-      } else if (content === '!재개') {
+      } else if (content === '!재개' || content === '!resume') {
         await this.music.resume(message);
-      } else if (content === '!큐') {
+      } else if (content === '!큐' || content === '!queue' || content === '!q') {
         await this.music.queue(message);
-      } else if (content === '!현재곡') {
+      } else if (content === '!현재곡' || content === '!np' || content === '!nowplaying') {
         await this.music.nowPlaying(message);
-      } else if (content.startsWith('!음량')) {
-        const vol = content.slice('!음량'.length).trim();
+      } else if (content.startsWith('!음량') || content.startsWith('!volume') || content.startsWith('!vol')) {
+        const vol = content.replace(/^!(음량|volume|vol)\s*/, '').trim();
         if (!vol) {
           return message.reply('❌ 사용법: `!음량 <0-100>`');
         }
