@@ -1,5 +1,5 @@
 const { DisTube } = require('distube');
-const { YouTubePlugin } = require('@distube/youtube');
+const { YtDlpPlugin } = require('@distube/yt-dlp');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 
@@ -9,17 +9,14 @@ class MusicService {
     this.distube = new DisTube(client, {
       emitNewSongOnly: true,
       plugins: [
-        new YouTubePlugin({
-          ytdlOptions: {
-            highWaterMark: 1 << 25,
-            quality: 'highestaudio',
-          },
+        new YtDlpPlugin({
+          update: false, // Docker에서 이미 설치됨
         }),
       ],
     });
 
     this.setupEvents();
-    logger.info('DisTube 초기화 완료');
+    logger.info('DisTube + yt-dlp 초기화 완료');
   }
 
   setupEvents() {

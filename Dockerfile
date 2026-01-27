@@ -1,16 +1,22 @@
 FROM node:20-slim
 
-# ffmpeg 및 오디오 코덱, 빌드 도구 설치
+# ffmpeg, yt-dlp, 오디오 코덱, 빌드 도구 설치
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    python3 \
+    python3-pip \
     libopus0 \
     libopus-dev \
     libsodium23 \
     libsodium-dev \
-    python3 \
     build-essential \
+    curl \
+    && pip3 install --break-system-packages yt-dlp \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp 설치 확인
+RUN yt-dlp --version
 
 WORKDIR /app
 
