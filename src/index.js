@@ -47,7 +47,7 @@ class MapleBot {
       this.discord = new DiscordService(this.client);
 
       // 음악 서비스 초기화
-      this.music = new MusicService();
+      this.music = new MusicService(this.client);
       logger.info('음악 서비스 초기화 완료');
 
       // 이벤트 핸들러 등록
