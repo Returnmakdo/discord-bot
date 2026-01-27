@@ -1,5 +1,5 @@
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, entersState } = require('@discordjs/voice');
-const play = require('play-dl');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus, StreamType } = require('@discordjs/voice');
+const { Innertube } = require('youtubei.js');
 const ffmpegPath = require('ffmpeg-static');
 const { EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
@@ -11,6 +11,17 @@ class MusicService {
   constructor() {
     // 길드별 큐 관리: { guildId: { queue: [], player, connection, current, volume } }
     this.guilds = new Map();
+    this.youtube = null;
+    this.initYoutube();
+  }
+
+  async initYoutube() {
+    try {
+      this.youtube = await Innertube.create();
+      logger.info('YouTube 클라이언트 초기화 완료');
+    } catch (error) {
+      logger.error('YouTube 클라이언트 초기화 실패:', error);
+    }
   }
 
   getGuildData(guildId) {
@@ -34,6 +45,13 @@ class MusicService {
       return message.reply('❌ 먼저 음성 채널에 접속해주세요.');
     }
 
+    if (!this.youtube) {
+      await this.initYoutube();
+      if (!this.youtube) {
+        return message.reply('❌ YouTube 서비스를 초기화할 수 없습니다.');
+      }
+    }
+
     const guildData = this.getGuildData(message.guild.id);
     guildData.textChannel = message.channel;
 
@@ -41,28 +59,38 @@ class MusicService {
     let trackInfo;
     try {
       const isUrl = query.startsWith('http');
-      let result;
+      let videoId;
+      let videoInfo;
 
       if (isUrl) {
-        result = await play.search(query, { limit: 1 });
+        // URL에서 video ID 추출
+        const urlMatch = query.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        if (urlMatch) {
+          videoId = urlMatch[1];
+        } else {
+          return message.reply('❌ 유효하지 않은 YouTube URL입니다.');
+        }
+        videoInfo = await this.youtube.getBasicInfo(videoId);
       } else {
-        result = await play.search(query, { source: { youtube: 'video' }, limit: 1 });
+        // 검색
+        const searchResults = await this.youtube.search(query, { type: 'video' });
+        const videos = searchResults.results.filter(r => r.type === 'Video');
+        if (!videos || videos.length === 0) {
+          return message.reply('❌ 검색 결과가 없습니다.');
+        }
+        videoId = videos[0].id;
+        videoInfo = await this.youtube.getBasicInfo(videoId);
       }
 
-      if (!result || result.length === 0) {
-        return message.reply('❌ 검색 결과가 없습니다.');
-      }
-
-      // 디버깅: 검색 결과 확인
-      logger.info(`검색 결과: ${JSON.stringify(result[0], null, 2)}`);
-
+      const details = videoInfo.basic_info;
       trackInfo = {
-        title: result[0].title,
-        url: result[0].url,
-        duration: result[0].durationRaw || '실시간',
-        durationMs: result[0].durationInSec * 1000,
-        thumbnail: result[0].thumbnails?.[0]?.url || null,
-        author: result[0].channel?.name || '알 수 없음',
+        id: videoId,
+        title: details.title,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        duration: this.formatDuration(details.duration),
+        durationMs: details.duration * 1000,
+        thumbnail: details.thumbnail?.[0]?.url || null,
+        author: details.author || '알 수 없음',
         requester: message.author.tag,
       };
     } catch (error) {
@@ -143,6 +171,13 @@ class MusicService {
     await this.playNext(message.guild.id);
   }
 
+  formatDuration(seconds) {
+    if (!seconds) return '실시간';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
   async playNext(guildId) {
     const guildData = this.guilds.get(guildId);
     if (!guildData || guildData.queue.length === 0) return;
@@ -151,11 +186,18 @@ class MusicService {
     guildData.current = track;
 
     try {
-      // play-dl로 스트림 가져오기
-      logger.info(`스트림 URL: ${track.url}`);
-      const stream = await play.stream(track.url);
-      const resource = createAudioResource(stream.stream, {
-        inputType: stream.type,
+      // youtubei.js로 스트림 가져오기
+      const info = await this.youtube.getBasicInfo(track.id);
+      const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+
+      if (!format) {
+        throw new Error('오디오 포맷을 찾을 수 없습니다');
+      }
+
+      const streamUrl = format.decipher(this.youtube.session.player);
+
+      const resource = createAudioResource(streamUrl, {
+        inputType: StreamType.Arbitrary,
         inlineVolume: true,
       });
       resource.volume?.setVolume(guildData.volume / 100);
