@@ -40,12 +40,12 @@ class MusicService {
     });
 
     this.player.events.on('playerError', (queue, error) => {
-      logger.error('플레이어 에러:', error.message);
-      queue.metadata.channel.send(`❌ 재생 오류가 발생했습니다.`).catch(() => {});
+      logger.error('플레이어 에러:', error);
+      queue.metadata.channel.send(`❌ 재생 오류: ${error.message || '알 수 없는 오류'}`).catch(() => {});
     });
 
     this.player.events.on('error', (queue, error) => {
-      logger.error('큐 에러:', error.message);
+      logger.error('큐 에러:', error);
     });
   }
 
