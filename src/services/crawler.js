@@ -76,8 +76,16 @@ class MapleCrawler {
       // 본문 내 첫 번째 이미지 URL 추출
       const $content = $('.new_board_con');
       if ($content.length) {
-        const imgSrc = $content.find('img').first().attr('src');
+        let imgSrc = $content.find('img').first().attr('src');
         if (imgSrc) {
+          // 상대 URL을 절대 URL로 변환
+          if (imgSrc.startsWith('//')) {
+            imgSrc = 'https:' + imgSrc;
+          } else if (imgSrc.startsWith('/')) {
+            imgSrc = this.baseUrl + imgSrc;
+          } else if (!imgSrc.startsWith('http')) {
+            imgSrc = this.baseUrl + '/' + imgSrc;
+          }
           return imgSrc;
         }
       }
