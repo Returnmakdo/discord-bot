@@ -150,11 +150,23 @@ class MapleBot {
 
     try {
       const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+
+      // 글로벌 등록 (모든 서버에 전파, 최대 1시간 소요)
       await rest.put(
         Routes.applicationCommands(this.client.user.id),
         { body: commands }
       );
-      logger.info(`슬래시 명령어 ${commands.length}개 등록 완료`);
+      logger.info(`슬래시 명령어 ${commands.length}개 글로벌 등록 완료`);
+
+      // 길드 등록 (GUILD_ID 지정 시 해당 서버에 즉시 반영)
+      const guildId = process.env.GUILD_ID;
+      if (guildId) {
+        await rest.put(
+          Routes.applicationGuildCommands(this.client.user.id, guildId),
+          { body: commands }
+        );
+        logger.info(`슬래시 명령어 ${commands.length}개 길드(${guildId}) 등록 완료`);
+      }
     } catch (error) {
       logger.error('슬래시 명령어 등록 실패:', error);
     }

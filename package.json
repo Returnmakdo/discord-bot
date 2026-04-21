@@ -1,6 +1,6 @@
 {
   "name": "maple-discord-bot",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "engines": {
     "node": ">=20.18.1"
   },
