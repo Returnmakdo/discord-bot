@@ -79,7 +79,7 @@ class MapleBot {
 
   // 이벤트 핸들러 설정
   setupEventHandlers() {
-    this.client.on('ready', async () => {
+    this.client.once('clientReady', async () => {
       logger.info(`봇 준비 완료: ${this.client.user.tag}`);
       this.client.user.setActivity('메이플스토리 업데이트 감시 중', { type: 3 });
       await this.registerSlashCommands();
