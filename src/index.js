@@ -269,8 +269,7 @@ class MapleBot {
         .addFields(
           { name: '📦 코어 종류', value: '스킬 / 강화 / 마스터리 / 공용 / 3rd 공용', inline: false },
           { name: '📊 결과', value: '필요한 **솔 에르다** 및 **솔 에르다 조각** 수량', inline: false }
-        )
-        .setFooter({ text: '참고: matsu1207.tistory.com/965' });
+        );
 
       const row1 = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('skill_core:skill').setLabel('스킬 코어').setStyle(ButtonStyle.Primary),
@@ -278,8 +277,8 @@ class MapleBot {
         new ButtonBuilder().setCustomId('skill_core:mastery').setLabel('마스터리 코어').setStyle(ButtonStyle.Primary)
       );
       const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('skill_core:common').setLabel('공용 코어').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('skill_core:third_common').setLabel('3rd 공용 코어').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('skill_core:common').setLabel('공용 코어').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('skill_core:third_common').setLabel('3rd 공용 코어').setStyle(ButtonStyle.Primary)
       );
 
       await message.channel.send({ embeds: [embed], components: [row1, row2] });
@@ -342,8 +341,7 @@ class MapleBot {
         .addFields(
           { name: '☀️ 솔 에르다', value: `**${totalErda.toLocaleString('ko-KR')}** 개`, inline: true },
           { name: '✨ 솔 에르다 조각', value: `**${totalFragment.toLocaleString('ko-KR')}** 개`, inline: true }
-        )
-        .setFooter({ text: '참고: matsu1207.tistory.com/965' });
+        );
 
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       logger.info(`6차 계산: ${label} ${currentLevel}→${targetLevel} = 에르다 ${totalErda}, 조각 ${totalFragment}`);
