@@ -1,10 +1,15 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder } = require('discord.js');
+const {
+  Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags
+} = require('discord.js');
 const MapleCrawler = require('./services/crawler');
 const DiscordService = require('./services/discord');
 const Summarizer = require('./services/summarizer');
 const NexonApi = require('./services/nexonApi');
 const MusicService = require('./services/music');
+const skillCalculator = require('./services/skillCalculator');
 const NoticeDB = require('./utils/database');
 const logger = require('./utils/logger');
 const fs = require('fs');
@@ -108,9 +113,35 @@ class MapleBot {
         return this.handleExpCommand(message, args);
       }
 
+      // 6차 스킬 강화 계산기
+      if (message.content.trim() === '!6차') {
+        const allowedChannel = process.env.CHANNEL_ID_SKILL;
+        if (allowedChannel && message.channelId !== allowedChannel) return;
+        return this.handleSkillCommand(message);
+      }
+
       // 음악 명령어
       if (this.music) {
         await this.handleMusicCommand(message);
+      }
+    });
+
+    // 버튼/Modal 인터랙션 처리
+    this.client.on('interactionCreate', async (interaction) => {
+      try {
+        if (interaction.isButton() && interaction.customId.startsWith('skill_core:')) {
+          const coreId = interaction.customId.slice('skill_core:'.length);
+          return this.showSkillModal(interaction, coreId);
+        }
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('skill_modal:')) {
+          const coreId = interaction.customId.slice('skill_modal:'.length);
+          return this.handleSkillModalSubmit(interaction, coreId);
+        }
+      } catch (error) {
+        logger.error('인터랙션 처리 에러:', error);
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: '❌ 처리 중 오류가 발생했습니다.', flags: MessageFlags.Ephemeral }).catch(() => {});
+        }
       }
     });
 
@@ -225,6 +256,99 @@ class MapleBot {
       } else {
         await message.reply(errorMessage);
       }
+    }
+  }
+
+  // 6차 스킬 강화 계산기 UI 전송
+  async handleSkillCommand(message) {
+    try {
+      const embed = new EmbedBuilder()
+        .setColor(0x007bff)
+        .setTitle('🔮 6차 스킬 강화 비용 계산기')
+        .setDescription('강화할 코어 종류를 선택하면 현재/목표 레벨을 입력할 수 있어요.')
+        .addFields(
+          { name: '📦 코어 종류', value: '스킬 / 강화 / 마스터리 / 공용 / 3rd 공용', inline: false },
+          { name: '📊 결과', value: '필요한 **솔 에르다** 및 **솔 에르다 조각** 수량', inline: false }
+        )
+        .setFooter({ text: '참고: matsu1207.tistory.com/965' });
+
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('skill_core:skill').setLabel('스킬 코어').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('skill_core:enhancement').setLabel('강화 코어').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('skill_core:mastery').setLabel('마스터리 코어').setStyle(ButtonStyle.Primary)
+      );
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('skill_core:common').setLabel('공용 코어').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('skill_core:third_common').setLabel('3rd 공용 코어').setStyle(ButtonStyle.Secondary)
+      );
+
+      await message.channel.send({ embeds: [embed], components: [row1, row2] });
+    } catch (error) {
+      logger.error('6차 계산기 UI 전송 실패:', error);
+      await message.reply('❌ 계산기 UI를 불러오지 못했습니다.').catch(() => {});
+    }
+  }
+
+  // 코어 버튼 → Modal 팝업
+  async showSkillModal(interaction, coreId) {
+    const label = skillCalculator.coreLabels[coreId];
+    if (!label) {
+      return interaction.reply({ content: '❌ 알 수 없는 코어 종류입니다.', flags: MessageFlags.Ephemeral });
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(`skill_modal:${coreId}`)
+      .setTitle(`${label} 강화 비용 계산`);
+
+    const currentInput = new TextInputBuilder()
+      .setCustomId('current_level')
+      .setLabel('현재 레벨 (0 ~ 29)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('예: 0')
+      .setRequired(true)
+      .setMaxLength(2);
+
+    const targetInput = new TextInputBuilder()
+      .setCustomId('target_level')
+      .setLabel('목표 레벨 (1 ~ 30)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('예: 30')
+      .setRequired(true)
+      .setMaxLength(2);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(currentInput),
+      new ActionRowBuilder().addComponents(targetInput)
+    );
+
+    await interaction.showModal(modal);
+  }
+
+  // Modal 제출 → 결과 embed 응답
+  async handleSkillModalSubmit(interaction, coreId) {
+    const label = skillCalculator.coreLabels[coreId];
+    const currentRaw = interaction.fields.getTextInputValue('current_level').trim();
+    const targetRaw = interaction.fields.getTextInputValue('target_level').trim();
+    const currentLevel = Number.parseInt(currentRaw, 10);
+    const targetLevel = Number.parseInt(targetRaw, 10);
+
+    try {
+      const { totalErda, totalFragment } = skillCalculator.calculate(coreId, currentLevel, targetLevel);
+
+      const embed = new EmbedBuilder()
+        .setColor(0x28a745)
+        .setTitle(`🔮 ${label} 강화 비용`)
+        .setDescription(`**Lv.${currentLevel} → Lv.${targetLevel}** 강화에 필요한 재화`)
+        .addFields(
+          { name: '☀️ 솔 에르다', value: `**${totalErda.toLocaleString('ko-KR')}** 개`, inline: true },
+          { name: '✨ 솔 에르다 조각', value: `**${totalFragment.toLocaleString('ko-KR')}** 개`, inline: true }
+        )
+        .setFooter({ text: '참고: matsu1207.tistory.com/965' });
+
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      logger.info(`6차 계산: ${label} ${currentLevel}→${targetLevel} = 에르다 ${totalErda}, 조각 ${totalFragment}`);
+    } catch (error) {
+      await interaction.reply({ content: `❌ ${error.message}`, flags: MessageFlags.Ephemeral });
     }
   }
 
