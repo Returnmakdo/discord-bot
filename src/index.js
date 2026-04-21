@@ -2,13 +2,13 @@ require('dotenv').config();
 const {
   Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder,
   ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags
+  ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags,
+  REST, Routes, SlashCommandBuilder
 } = require('discord.js');
 const MapleCrawler = require('./services/crawler');
 const DiscordService = require('./services/discord');
 const Summarizer = require('./services/summarizer');
 const NexonApi = require('./services/nexonApi');
-const MusicService = require('./services/music');
 const skillCalculator = require('./services/skillCalculator');
 const NoticeDB = require('./utils/database');
 const logger = require('./utils/logger');
@@ -19,10 +19,7 @@ class MapleBot {
   constructor() {
     this.client = new Client({
       intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.Guilds
       ]
     });
 
@@ -35,7 +32,6 @@ class MapleBot {
     this.isRunning = false;
     this.isFirstRun = true; // 첫 실행 여부
     this.nexonApi = new NexonApi();
-    this.music = null;
   }
 
   // 초기화
@@ -50,10 +46,6 @@ class MapleBot {
 
       // Discord 서비스 초기화
       this.discord = new DiscordService(this.client);
-
-      // 음악 서비스 초기화
-      this.music = new MusicService(this.client);
-      logger.info('음악 서비스 초기화 완료');
 
       // 이벤트 핸들러 등록
       this.setupEventHandlers();
@@ -87,48 +79,37 @@ class MapleBot {
 
   // 이벤트 핸들러 설정
   setupEventHandlers() {
-    this.client.on('ready', () => {
+    this.client.on('ready', async () => {
       logger.info(`봇 준비 완료: ${this.client.user.tag}`);
       this.client.user.setActivity('메이플스토리 업데이트 감시 중', { type: 3 });
+      await this.registerSlashCommands();
     });
 
     this.client.on('error', (error) => {
       logger.error('Discord 클라이언트 에러:', error);
     });
 
-    // 메시지 명령어 처리
-    this.client.on('messageCreate', async (message) => {
-      if (message.author.bot) return;
-      if (!message.content.startsWith('!')) return;
-
-      // 경험치 명령어
-      if (message.content.startsWith('!경험치')) {
-        const allowedChannel = process.env.CHANNEL_ID_EXP;
-        if (allowedChannel && message.channelId !== allowedChannel) return;
-
-        const args = message.content.slice('!경험치'.length).trim();
-        if (!args) {
-          return message.reply('❌ 사용법: `!경험치 캐릭터닉네임`');
-        }
-        return this.handleExpCommand(message, args);
-      }
-
-      // 6차 스킬 강화 계산기
-      if (message.content.trim() === '!6차') {
-        const allowedChannel = process.env.CHANNEL_ID_SKILL;
-        if (allowedChannel && message.channelId !== allowedChannel) return;
-        return this.handleSkillCommand(message);
-      }
-
-      // 음악 명령어
-      if (this.music) {
-        await this.handleMusicCommand(message);
-      }
-    });
-
-    // 버튼/Modal 인터랙션 처리
+    // 슬래시 / 버튼 / Modal 인터랙션 처리
     this.client.on('interactionCreate', async (interaction) => {
       try {
+        if (interaction.isChatInputCommand()) {
+          if (interaction.commandName === '경험치') {
+            const allowedChannel = process.env.CHANNEL_ID_EXP;
+            if (allowedChannel && interaction.channelId !== allowedChannel) {
+              return interaction.reply({ content: `❌ 이 명령어는 <#${allowedChannel}> 채널에서만 사용할 수 있어요.`, flags: MessageFlags.Ephemeral });
+            }
+            const characterName = interaction.options.getString('캐릭터', true);
+            return this.handleExpCommand(interaction, characterName);
+          }
+          if (interaction.commandName === '6차') {
+            const allowedChannel = process.env.CHANNEL_ID_SKILL;
+            if (allowedChannel && interaction.channelId !== allowedChannel) {
+              return interaction.reply({ content: `❌ 이 명령어는 <#${allowedChannel}> 채널에서만 사용할 수 있어요.`, flags: MessageFlags.Ephemeral });
+            }
+            return this.handleSkillCommand(interaction);
+          }
+          return;
+        }
         if (interaction.isButton() && interaction.customId.startsWith('skill_core:')) {
           const coreId = interaction.customId.slice('skill_core:'.length);
           return this.showSkillModal(interaction, coreId);
@@ -150,16 +131,44 @@ class MapleBot {
     process.on('SIGTERM', () => this.shutdown());
   }
 
-  // 경험치 조회 명령어 처리
-  async handleExpCommand(message, characterName) {
-    let loadingMsg = null;
+  // 슬래시 명령어 등록
+  async registerSlashCommands() {
+    const commands = [
+      new SlashCommandBuilder()
+        .setName('경험치')
+        .setDescription('메이플스토리 캐릭터의 최근 10일간 경험치 히스토리를 조회합니다')
+        .addStringOption(option =>
+          option
+            .setName('캐릭터')
+            .setDescription('조회할 캐릭터 닉네임')
+            .setRequired(true)
+        ),
+      new SlashCommandBuilder()
+        .setName('6차')
+        .setDescription('6차 스킬 강화 비용 계산기')
+    ].map(command => command.toJSON());
+
     try {
-      loadingMsg = await message.reply('🔍 경험치 정보를 조회 중...');
+      const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN);
+      await rest.put(
+        Routes.applicationCommands(this.client.user.id),
+        { body: commands }
+      );
+      logger.info(`슬래시 명령어 ${commands.length}개 등록 완료`);
+    } catch (error) {
+      logger.error('슬래시 명령어 등록 실패:', error);
+    }
+  }
+
+  // 경험치 조회 명령어 처리
+  async handleExpCommand(interaction, characterName) {
+    try {
+      await interaction.deferReply();
 
       // 1. OCID 조회
       const ocid = await this.nexonApi.getCharacterOcid(characterName);
       if (!ocid) {
-        return loadingMsg.edit(`❌ 캐릭터 "${characterName}"을(를) 찾을 수 없습니다.`);
+        return interaction.editReply(`❌ 캐릭터 "${characterName}"을(를) 찾을 수 없습니다.`);
       }
 
       // 2. 기본 정보 조회
@@ -169,7 +178,7 @@ class MapleBot {
       const history = await this.nexonApi.getExpHistoryRange(ocid, 10);
 
       if (history.length < 2) {
-        return loadingMsg.edit(`❌ "${characterName}"의 경험치 히스토리 데이터가 충분하지 않습니다.`);
+        return interaction.editReply(`❌ "${characterName}"의 경험치 히스토리 데이터가 충분하지 않습니다.`);
       }
 
       // 4. 경험치 변화량 계산
@@ -238,7 +247,7 @@ class MapleBot {
       const attachment = new AttachmentBuilder(chartBuffer, { name: 'exp_chart.png' });
       embed.setImage('attachment://exp_chart.png');
 
-      await loadingMsg.edit({ content: '', embeds: [embed], files: [attachment] });
+      await interaction.editReply({ content: '', embeds: [embed], files: [attachment] });
       logger.info(`경험치 조회 완료: ${characterName}`);
 
     } catch (error) {
@@ -251,16 +260,16 @@ class MapleBot {
         errorMessage = '❌ API 요청이 너무 빠릅니다. 잠시 후 다시 시도해주세요.';
       }
 
-      if (loadingMsg) {
-        await loadingMsg.edit(errorMessage);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(errorMessage).catch(() => {});
       } else {
-        await message.reply(errorMessage);
+        await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral }).catch(() => {});
       }
     }
   }
 
   // 6차 스킬 강화 계산기 UI 전송
-  async handleSkillCommand(message) {
+  async handleSkillCommand(interaction) {
     try {
       const embed = new EmbedBuilder()
         .setColor(0x007bff)
@@ -281,10 +290,14 @@ class MapleBot {
         new ButtonBuilder().setCustomId('skill_core:third_common').setLabel('3rd 공용 코어').setStyle(ButtonStyle.Primary)
       );
 
-      await message.channel.send({ embeds: [embed], components: [row1, row2] });
+      await interaction.reply({ embeds: [embed], components: [row1, row2] });
     } catch (error) {
       logger.error('6차 계산기 UI 전송 실패:', error);
-      await message.reply('❌ 계산기 UI를 불러오지 못했습니다.').catch(() => {});
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply('❌ 계산기 UI를 불러오지 못했습니다.').catch(() => {});
+      } else {
+        await interaction.reply({ content: '❌ 계산기 UI를 불러오지 못했습니다.', flags: MessageFlags.Ephemeral }).catch(() => {});
+      }
     }
   }
 
@@ -347,42 +360,6 @@ class MapleBot {
       logger.info(`6차 계산: ${label} ${currentLevel}→${targetLevel} = 에르다 ${totalErda}, 조각 ${totalFragment}`);
     } catch (error) {
       await interaction.reply({ content: `❌ ${error.message}`, flags: MessageFlags.Ephemeral });
-    }
-  }
-
-  // 음악 명령어 처리
-  async handleMusicCommand(message) {
-    const content = message.content;
-
-    try {
-      if (content.startsWith('!재생') || content.startsWith('!play') || content.startsWith('!p ')) {
-        const query = content.replace(/^!(재생|play|p)\s*/, '').trim();
-        if (!query) {
-          return message.reply('❌ 사용법: `!재생 <검색어 또는 URL>`');
-        }
-        await this.music.play(message, query);
-      } else if (content === '!스킵' || content === '!skip' || content === '!s') {
-        await this.music.skip(message);
-      } else if (content === '!정지' || content === '!stop') {
-        await this.music.stop(message);
-      } else if (content === '!일시정지' || content === '!pause') {
-        await this.music.pause(message);
-      } else if (content === '!재개' || content === '!resume') {
-        await this.music.resume(message);
-      } else if (content === '!큐' || content === '!queue' || content === '!q') {
-        await this.music.queue(message);
-      } else if (content === '!현재곡' || content === '!np' || content === '!nowplaying') {
-        await this.music.nowPlaying(message);
-      } else if (content.startsWith('!음량') || content.startsWith('!volume') || content.startsWith('!vol')) {
-        const vol = content.replace(/^!(음량|volume|vol)\s*/, '').trim();
-        if (!vol) {
-          return message.reply('❌ 사용법: `!음량 <0-100>`');
-        }
-        await this.music.volume(message, vol);
-      }
-    } catch (error) {
-      logger.error('음악 명령어 처리 에러:', error);
-      await message.reply('❌ 음악 명령어 처리 중 오류가 발생했습니다.').catch(() => {});
     }
   }
 
@@ -524,8 +501,8 @@ class MapleBot {
         .setTitle('🍁 경험치 조회 사용법')
         .setDescription('메이플스토리 캐릭터의 최근 10일간 경험치 히스토리를 조회할 수 있습니다.')
         .addFields(
-          { name: '📝 사용 방법', value: '```\n!경험치 캐릭터닉네임\n```', inline: false },
-          { name: '📌 예시', value: '`!경험치 김막도`\n`!경험치 삼지창`\n`!경험치 제빙`\n`!경험치 방난`', inline: false },
+          { name: '📝 사용 방법', value: '```\n/경험치 캐릭터:캐릭터닉네임\n```', inline: false },
+          { name: '📌 예시', value: '`/경험치 캐릭터:김막도`\n`/경험치 캐릭터:삼지창`\n`/경험치 캐릭터:제빙`\n`/경험치 캐릭터:방난`', inline: false },
           { name: '📊 제공 정보', value: '• 캐릭터 기본 정보 (월드, 레벨, 직업)\n• 10일간 경험치 획득량 그래프\n• 총 획득량 및 일평균 획득량\n• 길드 정보', inline: false }
         )
         .setFooter({ text: 'Nexon Open API 기반 • 데이터는 매일 새벽 갱신됩니다' })
